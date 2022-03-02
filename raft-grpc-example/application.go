@@ -12,6 +12,7 @@ import (
 	pb "github.com/Jille/raft-grpc-example/proto"
 	"github.com/Jille/raft-grpc-leader-rpc/rafterrors"
 	"github.com/hashicorp/raft"
+
 )
 
 // wordTracker keeps track of the three longest words it ever saw.
@@ -40,6 +41,9 @@ func (f *wordTracker) Apply(l *raft.Log) interface{} {
 	f.mtx.Lock()
 	defer f.mtx.Unlock()
 	w := string(l.Data)
+
+	fmt.Println("wordTracker::Apply ", w)
+
 	for i := 0; i < len(f.words); i++ {
 		if compareWords(w, f.words[i]) {
 			copy(f.words[i+1:], f.words[i:])
@@ -87,10 +91,13 @@ type rpcInterface struct {
 }
 
 func (r rpcInterface) AddWord(ctx context.Context, req *pb.AddWordRequest) (*pb.AddWordResponse, error) {
+	fmt.Println("AddWord, raft::Apply ", req.GetWord())
+
 	f := r.raft.Apply([]byte(req.GetWord()), time.Second)
 	if err := f.Error(); err != nil {
 		return nil, rafterrors.MarkRetriable(err)
 	}
+
 	return &pb.AddWordResponse{
 		CommitIndex: f.Index(),
 	}, nil

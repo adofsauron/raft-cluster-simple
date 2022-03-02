@@ -7,6 +7,8 @@ import (
 	"log"
 	"net"
 	"os"
+	"time"
+	"strconv"
 	"path/filepath"
 
 	pb "github.com/Jille/raft-grpc-example/proto"
@@ -27,16 +29,49 @@ var (
 	raftDir       = flag.String("raft_data_dir", "data/", "Raft data dir")
 	raftBootstrap = flag.Bool("raft_bootstrap", false, "Whether to bootstrap the Raft cluster")
 
-	logFile       = flag.String("log_file", "./log", "log file")
-
+	logFile = flag.String("log_file", "./log", "log file")
 )
+
+
+var g_localaddr = ""
+
+
+func TestWriteApply(svr *rpcInterface) {
+	req := &pb.AddWordRequest{}
+
+	index := 0
+	for {
+
+		req.Word = "hello_"
+		index++
+
+		req.Word = req.Word + strconv.Itoa(index)
+
+		time.Sleep(time.Duration(5)*time.Second)
+
+		leaderAddr := string(svr.raft.Leader())
+		localAddr := g_localaddr
+
+		if leaderAddr != localAddr {
+			fmt.Println("---------------------------------")
+			continue
+		}
+
+		_,err := svr.AddWord(context.Background(), req)
+		if nil != err {
+			fmt.Println("AddWord fail, err = ", err)
+		}
+
+		fmt.Println("---------------------------------")
+	}
+}
 
 func main() {
 
 	flag.Parse()
 
 	{
-		f, err := os.OpenFile(*logFile, os.O_WRONLY|os.O_CREATE|os.O_SYNC|os.O_APPEND,0755)
+		f, err := os.OpenFile(*logFile, os.O_WRONLY|os.O_CREATE|os.O_SYNC|os.O_APPEND, 0755)
 		if nil != err {
 			fmt.Println("ERROR: os.OpenFile fail, ", logFile)
 			return
@@ -69,14 +104,19 @@ func main() {
 		log.Fatalf("failed to start raft: %v", err)
 	}
 	s := grpc.NewServer()
-	pb.RegisterExampleServer(s, &rpcInterface{
+	svr := &rpcInterface{
 		wordTracker: wt,
 		raft:        r,
-	})
+	}
+
+	go TestWriteApply(svr)
+
+	pb.RegisterExampleServer(s, svr)
 	tm.Register(s)
 	leaderhealth.Setup(r, s, []string{"Example"})
 	raftadmin.Register(s, r)
 	reflection.Register(s)
+
 	if err := s.Serve(sock); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
@@ -126,5 +166,6 @@ func NewRaft(ctx context.Context, myID, myAddress string, fsm raft.FSM) (*raft.R
 		}
 	}
 
+	g_localaddr = myAddress
 	return r, tm, nil
 }
