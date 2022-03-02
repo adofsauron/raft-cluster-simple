@@ -49,9 +49,11 @@ func TestWriteApply(svr *rpcInterface) {
 
 		time.Sleep(time.Duration(5)*time.Second)
 
+		LastIndex := svr.raft.LastIndex()
+		fmt.Println("LastIndex = ", LastIndex)
+
 		leaderAddr := string(svr.raft.Leader())
 		localAddr := g_localaddr
-
 		if leaderAddr != localAddr {
 			fmt.Println("---------------------------------")
 			continue
